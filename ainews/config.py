@@ -22,4 +22,4 @@ TELEGRAPH_TOKEN = os.getenv("TELEGRAPH_TOKEN", "")
 MAX_POSTS = int(os.getenv("MAX_POSTS_PER_RUN", "2"))
 MIN_SCORE = int(os.getenv("MIN_SCORE", "6"))
 DRY_RUN = os.getenv("DRY_RUN", "1") == "1"
-DB_PATH = os.getenv("DB_PATH", "news_live.db")
+DB_PATH = os.getenv("DB_PATH", str(pathlib.Path(__file__).resolve().parent.parent / "news_live.db"))

@@ -15,3 +15,7 @@ def is_seen(c, url):
 def mark(c, url, posted):
     c.execute("INSERT OR REPLACE INTO seen(url, posted) VALUES (?,?)", (url, int(posted)))
     c.commit()
+
+
+def count(c):
+    return c.execute("SELECT COUNT(*) FROM seen").fetchone()[0]

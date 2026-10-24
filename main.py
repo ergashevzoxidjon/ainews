@@ -12,7 +12,15 @@ def run():
         raise SystemExit("ANTHROPIC_API_KEY topilmadi. .env fayl main.py bilan bir papkada va nomi aynan .env bo'lishi kerak.")
     c = db.conn()
     posted = 0
-    for e in fetch.new_entries():
+    entries = fetch.new_entries()
+    if db.count(c) == 0 and not config.DRY_RUN:
+        # BASELINE: birinchi jonli ishga tushirishda mavjud yangiliklarni "ko'rilgan" deb belgilaymiz,
+        # shunda eski yangiliklar qayta e'lon qilinmaydi. Faqat keyin chiqqanlari yuboriladi.
+        for e in entries:
+            db.mark(c, e["url"], False)
+        log.info("BASELINE: %d ta mavjud yangilik belgilandi, e'lon qilinmadi", len(entries))
+        return
+    for e in entries:
         if posted >= config.MAX_POSTS:
             break
         if db.is_seen(c, e["url"]):
