@@ -20,21 +20,27 @@ def run():
             db.mark(c, e["url"], False)
         log.info("BASELINE: %d ta mavjud yangilik belgilandi, e'lon qilinmadi", len(entries))
         return
+    stats = {"yangi": 0, "matn_yoq": 0, "past_ball": 0, "xato": 0}
+    log.info("ISHGA TUSHDI: %d ta yozuv o'qildi", len(entries))
     for e in entries:
         if posted >= config.MAX_POSTS:
             break
         if db.is_seen(c, e["url"]):
             continue
+        stats["yangi"] += 1
         art = fetch.get_article(e["url"])
         if not art:
+            stats["matn_yoq"] += 1
             db.mark(c, e["url"], False)
             continue
         try:
             r = llm.process(e["title"], art["text"])
         except Exception as ex:
+            stats["xato"] += 1
             log.warning("LLM xato: %s", ex)
             continue
         if r["score"] < config.MIN_SCORE:
+            stats["past_ball"] += 1
             log.info("o'tkazildi (%s): %s", r["score"], e["title"])
             db.mark(c, e["url"], False)
             continue
@@ -53,6 +59,7 @@ def run():
         db.mark(c, e["url"], True)
         posted += 1
         time.sleep(5)
+    log.info("XULOSA: e'lon qilindi=%d, %s", posted, stats)
 
 
 if __name__ == "__main__":
