@@ -1,3 +1,6 @@
+import html
+import re
+
 import feedparser
 import requests
 import trafilatura
@@ -16,8 +19,16 @@ def new_entries():
             continue
         for e in d.entries[:10]:
             if getattr(e, "link", None):
-                out.append({"url": e.link, "title": getattr(e, "title", "")})
+                out.append({"url": e.link, "title": getattr(e, "title", ""),
+                            "summary": _short(getattr(e, "summary", ""))})
     return out
+
+
+def _short(s, n=300):
+    """RSS tavsifidan HTML teglarini olib, qisqa matn qaytaradi (baholash uchun)."""
+    s = html.unescape(re.sub(r"<[^>]+>", " ", s or ""))
+    s = re.sub(r"\s+", " ", s).strip()
+    return s[:n]
 
 
 def get_article(url):
