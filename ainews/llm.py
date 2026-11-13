@@ -7,6 +7,7 @@ Claude Haiku (zaxira). Ish ikki bosqichda: 1) sarlavhalar bitta so'rovda arzon b
 import json
 import logging
 import re
+import time
 from collections import Counter
 
 import requests
@@ -75,7 +76,7 @@ _claude = None
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
-def _gemini(model, prompt, max_tokens, thinking=True):
+def _gemini(model, prompt, max_tokens, thinking=True, retry=True):
     gen = {"responseMimeType": "application/json", "maxOutputTokens": max_tokens}
     if thinking:
         gen["thinkingConfig"] = {"thinkingLevel": "low"}
@@ -92,6 +93,9 @@ def _gemini(model, prompt, max_tokens, thinking=True):
     if r.status_code == 429:
         raise _Skip("bepul limit tugadi (429)", disable=True)
     if r.status_code >= 500:
+        if retry:  # vaqtinchalik band (503): 5 soniyadan keyin bir marta qayta urinamiz
+            time.sleep(5)
+            return _gemini(model, prompt, max_tokens, thinking, retry=False)
         raise _Skip(f"server xatosi {r.status_code}", disable=True)
     if r.status_code == 400 and thinking and "thinking" in r.text.lower():
         # Model thinkingLevel ni qo'llamasa — usiz qayta so'raymiz.
@@ -207,8 +211,15 @@ def score(entries, recent_titles=()):
                 raise ValueError("ballar bo'sh")
             return res
 
-        res = _ask(prompt, validate, gemini_tokens=4096, claude_tokens=2000,
-                   first_gemini=config.GEMINI_SCORE_MODEL)
+        try:
+            res = _ask(prompt, validate, gemini_tokens=4096, claude_tokens=2000,
+                       first_gemini=config.GEMINI_SCORE_MODEL)
+        except (Unavailable, BadOutput) as e:
+            if not out:
+                raise
+            # Oldingi bo'laklar allaqachon baholangan: ularni yo'qotmaymiz, qolganlari keyingi safar.
+            log.warning("Baholash qisman: %d/%d ta baholandi, qolganlari keyingi safar (%s)", len(out), len(entries), e)
+            break
         for i, sc in res.items():
             out[start + i - 1] = sc
     return out
