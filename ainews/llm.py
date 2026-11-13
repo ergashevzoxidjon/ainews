@@ -151,14 +151,27 @@ def _chain(first_gemini=None):
 
 
 def _parse(raw):
+    """Model JSON'ni turlicha qaytarishi mumkin: {...}, [...], qatorma-qator {...} {...} yoki oxirida ortiqcha matn bilan."""
     raw = re.sub(r"^```(?:json)?|```$", "", (raw or "").strip(), flags=re.M).strip()
-    m = re.search(r"\{.*\}", raw, re.S)
-    if not m:
+    dec, sep, i, objs = json.JSONDecoder(), re.compile(r"[\s,]*"), 0, []
+    start = re.search(r"[\{\[]", raw)
+    if not start:
         raise BadOutput("JSON topilmadi")
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError as e:
-        raise BadOutput(f"JSON buzuq: {e}")
+    i = start.start()
+    while True:
+        i = sep.match(raw, i).end()
+        if i >= len(raw) or raw[i] not in "{[":
+            break
+        try:
+            obj, i = dec.raw_decode(raw, i)
+        except json.JSONDecodeError as e:
+            if objs:
+                break
+            raise BadOutput(f"JSON buzuq: {e}")
+        objs.append(obj)
+    if not objs:
+        raise BadOutput("JSON topilmadi")
+    return objs[0] if len(objs) == 1 else objs
 
 
 def _ask(prompt, validate, gemini_tokens, claude_tokens, first_gemini=None):
@@ -181,7 +194,7 @@ def _ask(prompt, validate, gemini_tokens, claude_tokens, first_gemini=None):
                 if e.disable:
                     _disabled.add(prov)
                 break
-            except (BadOutput, ValueError, KeyError, TypeError) as e:
+            except (BadOutput, ValueError, KeyError, TypeError, AttributeError) as e:
                 got_answer = True
                 log.warning("%s: yaroqsiz javob (%s)", model, e)
     if got_answer:
@@ -203,7 +216,11 @@ def score(entries, recent_titles=()):
 
         def validate(d, n=len(chunk)):
             res = {}
-            for s in d["scores"]:
+            if isinstance(d, dict):  # {"scores": [...]} yoki bitta {"id":..., "score":...}
+                d = d.get("scores", [d] if "id" in d else None)
+            if not isinstance(d, list):
+                raise ValueError("ballar ro'yxati yo'q")
+            for s in d:
                 i = int(s["id"])
                 if 1 <= i <= n:
                     res[i] = max(1, min(10, int(float(s["score"]))))
@@ -228,6 +245,10 @@ def score(entries, recent_titles=()):
 # ---------------- 2-bosqich: tarjima ----------------
 def translate(title, text):
     def validate(d):
+        if isinstance(d, list) and len(d) == 1:
+            d = d[0]
+        if not isinstance(d, dict):
+            raise ValueError("JSON obyekt emas")
         for k in ("title_uz", "summary_uz", "body_uz"):
             if not d.get(k):
                 raise ValueError(f"'{k}' yo'q")
